@@ -67,6 +67,7 @@ function HeroSection({
   const inputCardRef = useRef<HTMLDivElement>(null);
   const submitBtnRef = useRef<HTMLButtonElement>(null);
   const readLinkRef = useRef<HTMLButtonElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -143,6 +144,7 @@ function HeroSection({
       setSubmitted(true);
       setTimeout(() => {
         setStory("");
+        if (editableRef.current) editableRef.current.textContent = "";
         setSubmitted(false);
       }, 2500);
     }
@@ -381,27 +383,40 @@ function HeroSection({
             learn. This is your safe space!
           </strong>
         </p>
-        <div style={{ position: "relative", width: "100%" }}>
-          <textarea
-            value={story}
-            onChange={(e) => setStory(e.target.value)}
+        <div
+          style={{ position: "relative", width: "100%", cursor: "text" }}
+          onClick={() => editableRef.current?.focus()}
+        >
+          {/* Flex wrapper vertically + horizontally centers the editable content */}
+          <div
             style={{
-              width: "100%",
               minHeight: "14rem",
               background: "white",
-              border: "none",
               borderRadius: "26px",
               padding: "20px 24px",
-              fontFamily: "'Archivo Black', sans-serif",
-              fontSize: "clamp(1rem, 1.5vw, 1.25rem)",
-              color: "#131313",
-              resize: "vertical",
-              outline: "none",
               boxSizing: "border-box",
-              display: "block",
-              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
+          >
+            <div
+              ref={editableRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={(e) => setStory(e.currentTarget.textContent ?? "")}
+              style={{
+                width: "100%",
+                textAlign: "center",
+                fontFamily: "'Archivo Black', sans-serif",
+                fontSize: "clamp(1rem, 1.5vw, 1.25rem)",
+                color: "#131313",
+                outline: "none",
+                wordBreak: "break-word",
+                whiteSpace: "pre-wrap",
+              }}
+            />
+          </div>
           {!story && (
             <span
               style={{
