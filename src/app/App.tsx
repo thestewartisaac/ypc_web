@@ -4,6 +4,11 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import svgPaths from "../imports/PrivacyLeaked/svg-xnk1c3x1j4";
 import imgHeroImage from "../imports/PrivacyLeaked/4004e0f31a09932151c9d23d0924d88bd99852f2.png";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import emailjs from "@emailjs/browser";
+
+const EMAILJS_SERVICE_ID  = "service_44gaomb";
+const EMAILJS_TEMPLATE_ID = "template_l8clkj8";
+const EMAILJS_PUBLIC_KEY  = "hluRKMJ6zxfM5BZru";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -133,25 +138,47 @@ function StoryDialog({
     setSubmitting(true);
 
     try {
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-094f091c/submit-story`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+      const displayName = initialsOnly
+        ? name.trim().split(/\s+/).map((n) => n[0].toUpperCase()).join(".") + "."
+        : name.trim();
+
+      const submittedAt = new Date().toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+      // 1. Store in database (non-blocking — don't fail the whole flow if this errors)
+      try {
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-094f091c/submit-story`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+            body: JSON.stringify({ story, name: name.trim(), initialsOnly }),
           },
-          body: JSON.stringify({ story, name: name.trim(), initialsOnly }),
-        },
-      );
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || `Server error ${res.status}`);
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          console.error("Backend storage error:", data.error || `HTTP ${res.status}`);
+        }
+      } catch (backendErr) {
+        console.error("Backend fetch failed:", backendErr);
       }
 
-      // Animate form out then show success
+      // 2. Send email via EmailJS
+      const emailResult = await emailjs.send(
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        { submitter_name: displayName, story_content: story, submitted_at: submittedAt },
+        EMAILJS_PUBLIC_KEY,
+      );
+
+      console.log("EmailJS response:", emailResult.status, emailResult.text);
+
+      // 3. Animate to success
       gsap.to(formRef.current, {
         opacity: 0,
         x: -32,
@@ -164,8 +191,10 @@ function StoryDialog({
         },
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      console.error("Story submission error:", message);
+      const message = err instanceof Error
+        ? `EmailJS error: ${err.message}`
+        : `Unexpected error: ${String(err)}`;
+      console.error("Story submission error:", err);
       setSubmitError(message);
       setSubmitting(false);
     }
