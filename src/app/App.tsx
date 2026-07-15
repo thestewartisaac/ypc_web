@@ -3,6 +3,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import svgPaths from "../imports/PrivacyLeaked/svg-xnk1c3x1j4";
 import imgHeroImage from "../imports/PrivacyLeaked/4004e0f31a09932151c9d23d0924d88bd99852f2.png";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -51,6 +52,363 @@ function Logo() {
   );
 }
 
+// ─── Story Dialog ────────────────────────────────────────────────────────────
+
+function StoryDialog({
+  isOpen,
+  story,
+  onClose,
+  onSubmitted,
+}: {
+  isOpen: boolean;
+  story: string;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [initialsOnly, setInitialsOnly] = useState(false);
+  const [phase, setPhase] = useState<"form" | "success">("form");
+  const [nameFocused, setNameFocused] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
+  const circleRef = useRef<SVGCircleElement>(null);
+  const checkRef = useRef<SVGPathElement>(null);
+
+  // Animate in + reset state when dialog opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setPhase("form");
+    setName("");
+    setInitialsOnly(false);
+    setNameFocused(false);
+
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power2.out" });
+    gsap.fromTo(
+      dialogRef.current,
+      { scale: 0.86, opacity: 0, y: 28 },
+      { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: "back.out(1.35)", delay: 0.06 },
+    );
+  }, [isOpen]);
+
+  // Animate success view in after phase switch
+  useEffect(() => {
+    if (phase !== "success" || !successRef.current) return;
+
+    gsap.fromTo(
+      successRef.current,
+      { opacity: 0, y: 22 },
+      { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" },
+    );
+
+    // Draw the animated checkmark
+    const delay = setTimeout(() => {
+      if (!circleRef.current || !checkRef.current) return;
+      const cl = circleRef.current.getTotalLength();
+      const ck = checkRef.current.getTotalLength();
+      gsap.set(circleRef.current, { strokeDasharray: cl, strokeDashoffset: cl });
+      gsap.set(checkRef.current, { strokeDasharray: ck, strokeDashoffset: ck });
+      gsap.to(circleRef.current, { strokeDashoffset: 0, duration: 0.52, ease: "power2.out" });
+      gsap.to(checkRef.current, { strokeDashoffset: 0, duration: 0.34, ease: "power2.out", delay: 0.38 });
+    }, 60);
+
+    return () => clearTimeout(delay);
+  }, [phase]);
+
+  const animateClose = (cb: () => void) => {
+    const tl = gsap.timeline({ onComplete: cb });
+    tl.to(dialogRef.current, { scale: 0.88, opacity: 0, y: 18, duration: 0.22, ease: "power2.in" })
+      .to(backdropRef.current, { opacity: 0, duration: 0.2 }, "-=0.12");
+  };
+
+  const handleClose = () => animateClose(onClose);
+
+  const handleSubmitStory = async () => {
+    if (!name.trim() || submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-094f091c/submit-story`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({ story, name: name.trim(), initialsOnly }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Server error ${res.status}`);
+      }
+
+      // Animate form out then show success
+      gsap.to(formRef.current, {
+        opacity: 0,
+        x: -32,
+        duration: 0.24,
+        ease: "power2.in",
+        onComplete: () => {
+          onSubmitted();
+          setPhase("success");
+          setSubmitting(false);
+        },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      console.error("Story submission error:", message);
+      setSubmitError(message);
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const btnBase: React.CSSProperties = {
+    height: "3.75rem",
+    borderRadius: "16px",
+    border: "none",
+    fontFamily: "'Archivo', sans-serif",
+    fontWeight: 600,
+    fontSize: "clamp(14px, 1vw, 16px)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+  };
+
+  return (
+    <div
+      ref={backdropRef}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+        boxSizing: "border-box",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+    >
+      <div
+        ref={dialogRef}
+        style={{
+          background: "white",
+          borderRadius: "26px",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.22), 0 6px 20px rgba(0,0,0,0.1)",
+          width: "100%",
+          maxWidth: "480px",
+          padding: "clamp(28px, 4vw, 44px)",
+          boxSizing: "border-box",
+        }}
+      >
+        {phase === "form" && (
+          <div ref={formRef}>
+            <h3 style={{
+              fontFamily: "'Archivo Black', sans-serif",
+              fontSize: "clamp(20px, 2vw, 26px)",
+              color: "#131313",
+              margin: "0 0 6px",
+              lineHeight: 1.2,
+            }}>
+              One last step
+            </h3>
+            <p style={{
+              fontFamily: "'Host Grotesk', sans-serif",
+              fontSize: "clamp(13px, 1vw, 15px)",
+              color: "rgba(19,19,19,0.5)",
+              margin: "0 0 28px",
+              lineHeight: 1.5,
+            }}>
+              Tell us how you'd like to be credited.
+            </p>
+
+            {/* Name input */}
+            <div style={{ marginBottom: "18px" }}>
+              <label style={{
+                display: "block",
+                fontFamily: "'Archivo', sans-serif",
+                fontWeight: 600,
+                fontSize: "clamp(13px, 1vw, 14px)",
+                color: "#131313",
+                marginBottom: "8px",
+              }}>
+                Your name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setNameFocused(false)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmitStory(); }}
+                placeholder="e.g. Sarah Johnson"
+                style={{
+                  width: "100%",
+                  height: "52px",
+                  border: nameFocused
+                    ? "1px solid rgba(7,82,46,0.45)"
+                    : "1px solid rgba(0,0,0,0.1)",
+                  borderRadius: "14px",
+                  padding: "0 16px",
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: "clamp(14px, 1vw, 15px)",
+                  color: "#131313",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  transition: "border-color 0.28s ease",
+                  background: "white",
+                }}
+              />
+            </div>
+
+            {/* Round checkbox */}
+            <label style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              cursor: "pointer",
+              marginBottom: "32px",
+            }}>
+              <input
+                type="checkbox"
+                checked={initialsOnly}
+                onChange={(e) => setInitialsOnly(e.target.checked)}
+                style={{ display: "none" }}
+              />
+              <div style={{
+                width: "22px",
+                height: "22px",
+                borderRadius: "50%",
+                border: initialsOnly ? "none" : "2px solid rgba(0,0,0,0.18)",
+                background: initialsOnly ? "#07522e" : "white",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "background 0.22s ease, border 0.22s ease",
+              }}>
+                {initialsOnly && (
+                  <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                    <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <span style={{
+                fontFamily: "'Host Grotesk', sans-serif",
+                fontSize: "clamp(13px, 1vw, 15px)",
+                color: "rgba(19,19,19,0.7)",
+                userSelect: "none",
+                lineHeight: 1.4,
+              }}>
+                Don't use my full name. Just initials.
+              </span>
+            </label>
+
+            {/* Error message */}
+            {submitError && (
+              <p style={{
+                fontFamily: "'Host Grotesk', sans-serif",
+                fontSize: "13px",
+                color: "#C62828",
+                background: "#FFECEC",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                margin: "0 0 16px",
+                lineHeight: 1.4,
+              }}>
+                {submitError}
+              </p>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={handleClose}
+                disabled={submitting}
+                style={{ ...btnBase, flex: 1, background: "#FFECEC", color: "#C62828", opacity: submitting ? 0.5 : 1 }}
+              >
+                Go back
+              </button>
+              <button
+                onClick={handleSubmitStory}
+                disabled={submitting || !name.trim()}
+                style={{
+                  ...btnBase,
+                  flex: 1,
+                  background: "#07522e",
+                  color: "white",
+                  opacity: name.trim() && !submitting ? 1 : 0.45,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                {submitting ? "Submitting…" : "Submit story"}
+                {!submitting && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 8H13M13 8L9 4M13 8L9 12" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phase === "success" && (
+          <div ref={successRef} style={{ opacity: 0, textAlign: "center", padding: "12px 0" }}>
+            {/* Animated checkmark */}
+            <div style={{ marginBottom: "20px", display: "flex", justifyContent: "center" }}>
+              <svg width="76" height="76" viewBox="0 0 76 76" fill="none">
+                <circle ref={circleRef} cx="38" cy="38" r="34" stroke="#07522e" strokeWidth="2.5" fill="none" />
+                <path ref={checkRef} d="M22 38L33 49L54 27" stroke="#07522e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+
+            <h3 style={{
+              fontFamily: "'Archivo Black', sans-serif",
+              fontSize: "clamp(22px, 2.2vw, 28px)",
+              color: "#131313",
+              margin: "0 0 10px",
+            }}>
+              Story submitted!
+            </h3>
+            <p style={{
+              fontFamily: "'Host Grotesk', sans-serif",
+              fontSize: "clamp(13px, 1vw, 15px)",
+              color: "rgba(19,19,19,0.5)",
+              margin: "0 0 32px",
+              lineHeight: 1.6,
+            }}>
+              Thank you for sharing. Our team will review it and publish it to help others learn.
+            </p>
+
+            <button onClick={handleClose} style={{ ...btnBase, width: "100%", background: "#318DF8", color: "white" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M13 8H3M3 8L7 4M3 8L7 12" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Go back
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Hero ────────────────────────────────────────────────────────────────────
 
 function HeroSection({
@@ -59,7 +417,7 @@ function HeroSection({
   onScrollToStories: () => void;
 }) {
   const [story, setStory] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const navbarRef = useRef<HTMLElement>(null);
@@ -140,14 +498,12 @@ function HeroSection({
   }, []);
 
   const handleSubmit = () => {
-    if (story.trim()) {
-      setSubmitted(true);
-      setTimeout(() => {
-        setStory("");
-        if (editableRef.current) editableRef.current.textContent = "";
-        setSubmitted(false);
-      }, 2500);
-    }
+    if (story.trim()) setDialogOpen(true);
+  };
+
+  const handleStorySubmitted = () => {
+    setStory("");
+    if (editableRef.current) editableRef.current.textContent = "";
   };
 
   return (
@@ -463,7 +819,7 @@ function HeroSection({
           (e.currentTarget.style.opacity = "1")
         }
       >
-        {submitted ? "Thank you! ✓" : "Submit"}
+        Submit
       </button>
 
       <button
@@ -487,6 +843,13 @@ function HeroSection({
       >
         Read other stories
       </button>
+
+      <StoryDialog
+        isOpen={dialogOpen}
+        story={story}
+        onClose={() => setDialogOpen(false)}
+        onSubmitted={handleStorySubmitted}
+      />
     </section>
   );
 }
